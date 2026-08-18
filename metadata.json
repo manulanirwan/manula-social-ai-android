@@ -1,0 +1,6 @@
+{
+  "name": "Manula Social AI",
+  "description": "AI-powered multi-platform social media content generator for YouTube, TikTok, Instagram, Threads, LinkedIn, Facebook, and X in Sinhala, English, and Mixed language.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
