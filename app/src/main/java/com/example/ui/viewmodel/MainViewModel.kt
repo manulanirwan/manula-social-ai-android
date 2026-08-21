@@ -12,6 +12,8 @@ import com.example.data.local.ProjectEntity
 import com.example.data.repository.SocialContentRepository
 import com.example.domain.model.*
 import com.example.engine.ContentQualityEngine
+import com.example.network.GeminiApiException
+import com.example.network.GeminiApiKeyMissingException
 import com.example.ui.components.NavigationTab
 import com.example.ui.theme.ThemeMode
 import kotlinx.coroutines.delay
@@ -45,6 +47,14 @@ data class MainUiState(
     val editingField: EditFieldContext? = null,
     val regeneratingPlatform: SocialPlatform? = null,
     
+    // API Key & Model Management
+    val isApiKeyConfigured: Boolean = false,
+    val isCustomApiKeySet: Boolean = false,
+    val maskedApiKey: String = "No key configured",
+    val isTestingApiKey: Boolean = false,
+    val apiKeyTestResult: String? = null,
+    val apiKeyTestSuccess: Boolean? = null,
+    
     // Theme & Settings
     val themeMode: ThemeMode = ThemeMode.DARK,
     val activeBrandProfile: BrandProfile? = null,
@@ -77,6 +87,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         loadActiveBrandProfile()
+        refreshApiKeyState()
     }
 
     private fun loadActiveBrandProfile() {
@@ -84,6 +95,87 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val active = repository.getActiveBrandProfile()
             _uiState.update { it.copy(activeBrandProfile = active) }
         }
+    }
+
+    fun refreshApiKeyState() {
+        val hasKey = repository.hasApiKey()
+        val masked = repository.getMaskedApiKey()
+        val isCustom = repository.isCustomKeySet()
+        _uiState.update {
+            it.copy(
+                isApiKeyConfigured = hasKey,
+                maskedApiKey = masked,
+                isCustomApiKeySet = isCustom
+            )
+        }
+    }
+
+    fun saveApiKey(apiKey: String) {
+        val trimmed = apiKey.trim()
+        if (trimmed.isBlank()) {
+            showToast("API Key cannot be empty.")
+            return
+        }
+        val saved = repository.saveApiKey(trimmed)
+        if (saved) {
+            refreshApiKeyState()
+            showToast("Gemini API key securely saved!")
+        } else {
+            showToast("Failed to save API key.")
+        }
+    }
+
+    fun removeApiKey() {
+        repository.removeApiKey()
+        refreshApiKeyState()
+        showToast("Gemini API key removed.")
+    }
+
+    fun testApiKey(apiKeyToTest: String? = null) {
+        val key = apiKeyToTest?.trim()?.takeIf { it.isNotBlank() } ?: repository.getApiKey()
+        if (key.isNullOrBlank()) {
+            _uiState.update {
+                it.copy(
+                    isTestingApiKey = false,
+                    apiKeyTestResult = "Please enter an API key to test.",
+                    apiKeyTestSuccess = false
+                )
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isTestingApiKey = true,
+                    apiKeyTestResult = "Connecting to Gemini 3.6 Flash...",
+                    apiKeyTestSuccess = null
+                )
+            }
+
+            val result = repository.testApiKey(key)
+            result.onSuccess { msg ->
+                _uiState.update {
+                    it.copy(
+                        isTestingApiKey = false,
+                        apiKeyTestResult = "✓ $msg",
+                        apiKeyTestSuccess = true
+                    )
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isTestingApiKey = false,
+                        apiKeyTestResult = "✗ ${err.localizedMessage ?: "Failed to connect to Gemini API."}",
+                        apiKeyTestSuccess = false
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearApiKeyTestResult() {
+        _uiState.update { it.copy(apiKeyTestResult = null, apiKeyTestSuccess = null) }
     }
 
     fun setNavTab(tab: NavigationTab) {
@@ -170,16 +262,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update {
                 it.copy(
                     isGenerating = true,
-                    generationStageText = "Analyzing creator concept...",
+                    generationStageText = "Connecting to Gemini 3.6 Flash...",
                     generationError = null
                 )
             }
 
-            delay(400)
-            _uiState.update { it.copy(generationStageText = "Formulating platform-native hooks & angles...") }
+            delay(300)
+            _uiState.update { it.copy(generationStageText = "Synthesizing platform-native hooks & angles...") }
 
-            delay(400)
-            _uiState.update { it.copy(generationStageText = "Optimizing search tags, character limits & CTAs...") }
+            delay(300)
+            _uiState.update { it.copy(generationStageText = "Formatting YouTube, TikTok, IG, Threads, LinkedIn, FB & X...") }
 
             try {
                 val socialPkg = repository.generateCompletePackage(
@@ -205,11 +297,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         activeResultPlatform = null // All tab
                     )
                 }
+            } catch (e: GeminiApiKeyMissingException) {
+                _uiState.update {
+                    it.copy(
+                        isGenerating = false,
+                        generationError = "Gemini API key is required. Please go to Settings -> Gemini API to add your API key."
+                    )
+                }
+            } catch (e: GeminiApiException) {
+                _uiState.update {
+                    it.copy(
+                        isGenerating = false,
+                        generationError = e.localizedMessage ?: "Gemini API generation error. Please try again."
+                    )
+                }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
                         isGenerating = false,
-                        generationError = "Unable to complete AI generation: ${e.localizedMessage ?: "Check network or API settings"}"
+                        generationError = "Generation failed: ${e.localizedMessage ?: "Please check connection or API key."}"
                     )
                 }
             }
@@ -258,7 +364,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update {
                 it.copy(
                     isGenerating = true,
-                    generationStageText = "Regenerating ${platform.displayName} ($styleInstruction)..."
+                    generationStageText = "Regenerating ${platform.displayName} via Gemini 3.6 Flash..."
                 )
             }
 
@@ -294,7 +400,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         generatedPackage = updatedPackage
                     )
                 }
-                showToast("${platform.displayName} content regenerated!")
+                showToast("${platform.displayName} regenerated with Gemini 3.6 Flash!")
             } catch (e: Exception) {
                 _uiState.update { it.copy(isGenerating = false) }
                 showToast("Regeneration error: ${e.localizedMessage}")

@@ -21,19 +21,31 @@ data class PartItem(
 )
 
 @JsonClass(generateAdapter = true)
+data class ThinkingConfig(
+    @Json(name = "thinkingLevel") val thinkingLevel: String? = "medium"
+)
+
+@JsonClass(generateAdapter = true)
 data class GenerationConfig(
-    @Json(name = "temperature") val temperature: Float? = 0.7f,
-    @Json(name = "topP") val topP: Float? = 0.95f,
-    @Json(name = "topK") val topK: Int? = 40,
-    @Json(name = "responseMimeType") val responseMimeType: String? = "application/json"
+    @Json(name = "responseMimeType") val responseMimeType: String? = "application/json",
+    @Json(name = "thinkingConfig") val thinkingConfig: ThinkingConfig? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class GeminiResponse(
-    @Json(name = "candidates") val candidates: List<CandidateItem>? = null
+    @Json(name = "candidates") val candidates: List<CandidateItem>? = null,
+    @Json(name = "error") val error: GeminiErrorResponse? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class CandidateItem(
-    @Json(name = "content") val content: ContentItem? = null
+    @Json(name = "content") val content: ContentItem? = null,
+    @Json(name = "finishReason") val finishReason: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class GeminiErrorResponse(
+    @Json(name = "code") val code: Int? = null,
+    @Json(name = "message") val message: String? = null,
+    @Json(name = "status") val status: String? = null
 )

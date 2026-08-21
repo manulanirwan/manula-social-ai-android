@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import android.content.Context
 import com.example.data.local.*
+import com.example.data.security.SecureApiKeyStorage
 import com.example.domain.model.*
 import com.example.engine.ContentQualityEngine
 import com.example.network.GeminiContentService
@@ -15,6 +16,7 @@ class SocialContentRepository(
     private val projectDao: ProjectDao,
     private val favoriteDao: FavoriteDao,
     private val brandProfileDao: BrandProfileDao,
+    private val secureStorage: SecureApiKeyStorage,
     private val geminiService: GeminiContentService = GeminiContentService()
 ) {
     private val moshi = RetrofitClient.moshi
@@ -27,15 +29,29 @@ class SocialContentRepository(
         fun getInstance(context: Context): SocialContentRepository {
             return INSTANCE ?: synchronized(this) {
                 val db = AppDatabase.getDatabase(context)
+                val secureStorage = SecureApiKeyStorage.getInstance(context)
                 val repo = SocialContentRepository(
                     projectDao = db.projectDao(),
                     favoriteDao = db.favoriteDao(),
-                    brandProfileDao = db.brandProfileDao()
+                    brandProfileDao = db.brandProfileDao(),
+                    secureStorage = secureStorage
                 )
                 INSTANCE = repo
                 repo
             }
         }
+    }
+
+    // API Key Management
+    fun getApiKey(): String? = secureStorage.getApiKey()
+    fun hasApiKey(): Boolean = secureStorage.hasApiKey()
+    fun getMaskedApiKey(): String = secureStorage.getMaskedApiKey()
+    fun saveApiKey(key: String): Boolean = secureStorage.saveApiKey(key)
+    fun removeApiKey() = secureStorage.removeApiKey()
+    fun isCustomKeySet(): Boolean = secureStorage.isCustomKeySet()
+
+    suspend fun testApiKey(key: String): Result<String> = withContext(Dispatchers.IO) {
+        geminiService.testConnection(key)
     }
 
     suspend fun generateCompletePackage(
@@ -48,8 +64,11 @@ class SocialContentRepository(
         brandProfile: BrandProfile?,
         selectedPlatforms: Set<SocialPlatform>
     ): SocialPackage = withContext(Dispatchers.IO) {
+        val apiKey = secureStorage.getApiKey()
+
         // Generate Version A
         val vA = geminiService.generateSocialPackages(
+            apiKey = apiKey,
             idea = idea,
             contentType = contentType,
             language = language,
@@ -61,8 +80,9 @@ class SocialContentRepository(
             variationType = VariationType.A
         )
 
-        // Generate Version B (Higher Curiosity)
+        // Generate Version B (Higher Curiosity / Punchy)
         val vB = geminiService.generateSocialPackages(
+            apiKey = apiKey,
             idea = idea,
             contentType = contentType,
             language = language,
@@ -74,8 +94,9 @@ class SocialContentRepository(
             variationType = VariationType.B
         )
 
-        // Generate Version C (Educational & Direct)
+        // Generate Version C (Educational & Direct Value)
         val vC = geminiService.generateSocialPackages(
+            apiKey = apiKey,
             idea = idea,
             contentType = contentType,
             language = language,
@@ -123,7 +144,10 @@ class SocialContentRepository(
         currentPkg: PlatformPackage,
         styleInstruction: String
     ): PlatformPackage = withContext(Dispatchers.IO) {
+        val apiKey = secureStorage.getApiKey()
+
         val newPkg = geminiService.generateSocialPackages(
+            apiKey = apiKey,
             idea = idea,
             contentType = contentType,
             language = language,
@@ -145,6 +169,30 @@ class SocialContentRepository(
             SocialPlatform.FACEBOOK -> currentPkg.copy(facebook = newPkg.facebook)
             SocialPlatform.X -> currentPkg.copy(x = newPkg.x)
         }
+    }
+
+    suspend fun regenerateSingleField(
+        platform: SocialPlatform,
+        fieldName: String,
+        currentContent: String,
+        originalIdea: String,
+        language: LanguageOption,
+        tone: ContentTone,
+        brandProfile: BrandProfile?,
+        instruction: String
+    ): String = withContext(Dispatchers.IO) {
+        val apiKey = secureStorage.getApiKey()
+        geminiService.regenerateField(
+            apiKey = apiKey,
+            platform = platform,
+            fieldName = fieldName,
+            currentContent = currentContent,
+            originalIdea = originalIdea,
+            language = language,
+            tone = tone,
+            brandProfile = brandProfile,
+            instruction = instruction
+        )
     }
 
     // Projects CRUD

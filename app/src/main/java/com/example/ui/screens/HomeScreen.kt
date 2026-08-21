@@ -240,7 +240,7 @@ fun HomeScreen(
                     shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().testTag("home_error_banner")
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
@@ -259,8 +259,17 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.weight(1f)
                         )
-                        TextButton(onClick = { viewModel.generateContent() }) {
-                            Text("Retry", fontWeight = FontWeight.Bold)
+                        if (uiState.generationError?.contains("Settings", ignoreCase = true) == true || !uiState.isApiKeyConfigured) {
+                            FilledTonalButton(
+                                onClick = { viewModel.setNavTab(NavigationTab.SETTINGS) },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text("Settings", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            TextButton(onClick = { viewModel.generateContent() }) {
+                                Text("Retry", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
